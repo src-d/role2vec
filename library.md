@@ -33,7 +33,7 @@ Details:
 
 * Hyperbolic space is inherently good for modeling hierarchical structure of the data: distance ~ similarity, vector norm ~ place in hierarchy.
 * The authors propose to use Poincare 2d ball for modelling hyperbolic space.
-* There're some stochastic gradient optimization methods suited working in this space.
+* There're some stochastic gradient optimization methods suited for working in this space.
 
 Thoughts: This paper brings up a good idea of using different spaces more suited for hierarchical data. The results are impressive and could be useful to us
 
@@ -138,9 +138,11 @@ https://arxiv.org/abs/1511.05493
 
 Details: 
 
-* Assume we have some node annotations (this is additional info, the annotations could be set to all 0's), then we'll initialize node representations with these annotations padded by zeros (so that our representation space is larger than annotation space).
-* We could feed these representations into a recurrent network with GRU-like units for a fixed number of steps to generate new node representations. This will be called Gated Graph Neural Networks.
-* 
+* Assume we have some node annotations (this is additional info, the annotations could be set to all 0's), then we'll initialize node representations with these annotations padded by zeros (so that our representation space is larger than annotation space) multiplied by the adjacency matrix.
+* We feed these representations into a recurrent network with GRU-like units for a fixed number of steps to generate new node representations, and then train an output model on top of these representations (using backpropagation through time). This will be called Gated Graph Neural Networks.
+* We could stack GCNNs for generating sequence of node representations. On each of these steps there'll be a separate GCNN trained for predicting outputs. There could be tasks for which we have the intermediate representations during training time, in which case we train all GCNNs separately, otherwise we train them jointly. This will be called Gated Graph Sequence Neural Networks.
+
+Thoughts: Very nice results on the bAbI tasks dataset, which confirm that explicitly modelling graph relations greatly simplifies the learning task. However, this model is not good for scalling, and doesn't provide any idea on how to extend it to new graphs. 
 
 
 ### A Generalization of Convolutional Neural Networks to Graph-Structured Data
@@ -149,6 +151,11 @@ http://arxiv.org/abs/1704.08165
 
 Details: 
 
+* Even if we don't know the spatial structure of a graph, we could always construct its transition matrix.
+* Define Q as the sum of transition matrix powers up to some power k. Matrix Q could be interpreted as the expected number of visits in k steps.
+* Each node is encoded with the top p highest values from the corresponding row in matrix Q. These vectors could be then used for applying convolutions, etc.
+
+Thoughts: There're no experiments for node classification, or link prediction on standard graph datasets, so it's hard to say whether this is a good approach for our task or not. The authors state that this work might be the very first one that generalizes convolutions for any graph, i.e. you could learn it once and then apply it to any graph, given its matrix Q. 
 
 
 ### Dynamics Based Features For Graph Classification
@@ -156,3 +163,19 @@ Details:
 http://arxiv.org/abs/1705.10817
 
 Details: 
+
+* Let's define an indicator vector which will represent random walker's position (coordinates represent nodes). M - transition matrix.
+* Compute autocovariance matrix at time step t for the indicator vector, i.e. covariance matrix between the indicator vector at positions 1 and t+1 – it could be expressed in terms of M and stationary distribution under M.
+* Let's denote H - the matrix containing all attribute vectors for nodes. For example, we could include second left eigenvector of M as an attribute. If an attribute is categorical it's substituted by a one-hot vector. 
+* Compute trace of matrix product between transposed H, autocovariance matrix and H. This is also known as generalized assortativity coefficient. Combining these coefficients computed for different attributes and time steps we'll get a vector representation for our initial graph.
+
+Thoughts: This is paper does graph embedding without producing any node embeddings. Could be interesting for finding similar graphs.
+
+
+### Distributed Representation of Subgraphs
+
+https://arxiv.org/abs/1702.06921v1
+
+Details: 
+
+* 
