@@ -1,0 +1,26 @@
+# Mac specific
+*.DS_Store
+
+# tex files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+*.vrb
+
+# jupyter notebooks
+*.ipynb_checkpoints/
+
+# virtualenv
+role2vec/*
+
+# python libraries
+ast2vec/*
+vecino/*
