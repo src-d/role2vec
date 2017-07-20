@@ -1,0 +1,3 @@
+git+https://github.com/bblfsh/client-python.git@v0.0.4#egg=bblfsh
+git+https://github.com/src-d/modelforge.git@develop#egg=modelforge
+git+https://github.com/src-d/ast2vec.git@develop#egg=ast2vec
