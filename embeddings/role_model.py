@@ -33,7 +33,7 @@ class RoleModel(MapReduce):
         self.model = joblib.load(model_path)
 
     def train(self, fname):
-        files = self._read(fname)
+        files = self.read_paths(fname)
 
         self._log.info("Train model.")
         self.model = MLPClassifier(random_state=1, verbose=True)
@@ -53,7 +53,7 @@ class RoleModel(MapReduce):
         self._log.info("Finished training.")
 
     def test(self, fname):
-        files = self._read(fname)
+        files = self.read_paths(fname)
 
         self._log.info("Test model.")
         y_real, y_pred = [], []
@@ -86,19 +86,11 @@ class RoleModel(MapReduce):
         return emb, roles
 
     def _mean_vec(self, nodes):
-        vecs = [self.emb[t] for node in nodes for t in chain(node.token,
-                ["RoleId_%d" % role for role in node.roles]) if t in self.emb]
-        if vecs:
-            return np.mean(vecs, axis=0)
-        return None
-
-    def _read(self, fname):
-        self._log.info("Scanning %s", fname)
-        files = [line.strip() for line in open(fname).readlines()]
-        self._log.info("Found %d files", len(files))
-        if not files:
-            raise ValueError("Make sure the file is not empty!")
-        return files
+        tokens = [t for node in nodes for t in chain(node.token,
+                  ["RoleId_%d" % role for role in node.roles]) if t in self.emb]
+        if not tokens:
+            return None, 0
+        return np.mean([self.emb[t] for t in tokens], axis=0), len(tokens)
 
 
 @MapReduce.wrap_queue_in
@@ -117,7 +109,7 @@ def _process_uast(self, filename):
                 child_vec = self._mean_vec([child])
                 grandchild_vec = self._mean_vec(child.children)
                 # add child to dataset
-                if child.children and child_vec is not None and grandchild_vec is not None:
+                if child_vec is not None and grandchild_vec is not None:
                     labels = np.zeros(len(self.roles), dtype=np.int8)
                     labels[[self.roles["RoleId_%d" % role] for role in child.roles]] = 1
                     X.append(np.concatenate((grandchild_vec, node_vecs[node_idx])))
