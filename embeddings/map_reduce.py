@@ -2,7 +2,6 @@ import multiprocessing
 import time
 
 from ast2vec.pickleable_logger import PickleableLogger
-from modelforge.progress_bar import progress_bar
 
 
 class MapReduce(PickleableLogger):
@@ -67,7 +66,7 @@ class MapReduce(PickleableLogger):
                 if result is None:
                     failures += 1
                     continue
-                func(result)
+                func(self, result)
 
             return failures
         return wrapper

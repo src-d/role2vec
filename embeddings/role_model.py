@@ -1,8 +1,9 @@
 from collections import namedtuple
 from itertools import chain
+import os
+import time
 
 import numpy as np
-from sklearn.dummy import DummyClassifier
 from sklearn.externals import joblib
 from sklearn.neural_network import MLPClassifier
 
@@ -14,89 +15,60 @@ Node = namedtuple("Node", ["id", "parent", "children", "roles", "tokens"])
 
 
 class RoleModel(MapReduce):
-    def __init__(self, log_level, num_processes, emb_path, model_path):
+    def __init__(self, log_level, num_processes, emb_path):
         super(RoleModel, self).__init__(log_level=log_level, num_processes=num_processes)
         self.emb, self.roles = self.load_emb(emb_path)
         self.model = None
-        self.path = model_path
         self.token_parser = TokenParser()
 
+    def save(self, model_path):
+        if self.model is None:
+            raise ValueError("Model is empty.")
+        self._log.info("Saving model to %s.", model_path)
+        joblib.dump(self.model, model_path)
+
+    def load(self, model_path):
+        if not os.path.exists(model_path):
+            raise ValueError("Provided path to model doesn't exist: %s", model_path)
+        self.model = joblib.load(model_path)
+
     def train(self, fname):
-        self._log.info("Scanning %s", fname)
-        files = [line.strip() for line in open(fname).readlines()]
-        self._log.info("Found %d files", len(files))
-        if not files:
-            return 0
+        files = self._read(fname)
 
         self._log.info("Train model.")
-        self.model = self._train(files)
+        self.model = MLPClassifier(random_state=1, verbose=True)
+        self.model.classes_ = sorted(self.roles.values())
+        counter = 0
+        start = time.time()
+
+        @MapReduce.wrap_queue_out
+        def train_uast(self, result):
+            nonlocal counter, start
+            X, y = result
+            counter += 1
+            self.model.partial_fit(X, y)
+            print(self.model.loss_, time.time() - start, counter)
+
+        self.parallelize(files, _process_uast, train_uast)
         self._log.info("Finished training.")
 
-        self._log.info("Saving model.")
-        joblib.dump(self.model, self.path)
+    def test(self, fname):
+        files = self._read(fname)
 
-    def test(self):
-        self._log.info("Loading model.")
-        self.model = joblib.load(self.path)
+        self._log.info("Test model.")
+        y_real, y_pred = [], []
 
-    def _train(self, files):
-        model = MLPClassifier(random_state=1, verbose=True)
-        dummies = [DummyClassifier(s, random_state=1)
-                   for s in ["stratified", "most_frequent", "uniform"]]
-        model.classes_ = sorted(self.roles.values())
-        # classes = sorted(self.roles.values())
-
-        @MapReduce.wrap_queue_in
-        def process_uast(self, filename):
-            X, y = [], []
-            uast_model = UASTModel().load(filename)
-
-            for uast in uast_model.uasts:
-                queue = [(uast, 0)]
-                node_vecs = [self.mean_vec([uast])]
-                n_nodes = 1
-
-                while queue:
-                    node, node_idx = queue.pop()
-                    for child in node.children:
-                        child_vec = self.mean_vec([child])
-                        # add child to dataset
-                        if child.children and child_vec is not None:
-                            labels = np.zeros(len(self.roles), dtype=np.int8)
-                            labels[[self.roles["RoleId_%d" % role] for role in child.roles]] = 1
-                            X.append(np.concatenate(
-                                (self.mean_vec(child.children), node_vecs[node_idx])))
-                            y.append(labels)
-                            queue.append((child, n_nodes))
-                            node_vecs.append(child_vec)
-                            n_nodes += 1
-
-            return X, y
-
-        data_X, data_y = [], []
         @MapReduce.wrap_queue_out
-        def train_uast(result):
-            nonlocal model, data_X, data_y
+        def test_uast(self, result):
+            nonlocal y_real, y_pred
             X, y = result
-            data_X.extend(X), data_y.extend(y)
-            # model.partial_fit(X, y, classes)
-            # print(model.loss_)
+            y_real.extend(y)
+            y_pred.extend(self.model.predict_proba(X))
 
-        self.parallelize(files, process_uast, train_uast)
-        np.savetxt("X.txt", data_X)
-        np.savetxt("y.txt", data_y)
-        # model.fit(data_X, data_y)
-        # for d in dummies:
-        #     d.fit(data_X, data_y)
-        # print(model.score(data_X, data_y), *(d.score(data_X, data_y) for d in dummies))
-        return model
-
-    def mean_vec(self, nodes):
-        vecs = [self.emb[t] for node in nodes for t in chain(node.token,
-                ["RoleId_%d" % role for role in node.roles]) if t in self.emb]
-        if vecs:
-            return np.mean(vecs, axis=0)
-        return None
+        self.parallelize(files, _process_uast, test_uast)
+        np.save("y_real.npy", y_real)
+        np.save("y_pred.npy", y_pred)
+        self._log.info("Finished testing.")
 
     @staticmethod
     def load_emb(emb_path):
@@ -112,3 +84,46 @@ class RoleModel(MapReduce):
 
         roles = {role: i for i, role in enumerate(roles)}
         return emb, roles
+
+    def _mean_vec(self, nodes):
+        vecs = [self.emb[t] for node in nodes for t in chain(node.token,
+                ["RoleId_%d" % role for role in node.roles]) if t in self.emb]
+        if vecs:
+            return np.mean(vecs, axis=0)
+        return None
+
+    def _read(self, fname):
+        self._log.info("Scanning %s", fname)
+        files = [line.strip() for line in open(fname).readlines()]
+        self._log.info("Found %d files", len(files))
+        if not files:
+            raise ValueError("Make sure the file is not empty!")
+        return files
+
+
+@MapReduce.wrap_queue_in
+def _process_uast(self, filename):
+    X, y = [], []
+    uast_model = UASTModel().load(filename)
+
+    for uast in uast_model.uasts:
+        queue = [(uast, 0)]
+        node_vecs = [self._mean_vec([uast])]
+        n_nodes = 1
+
+        while queue:
+            node, node_idx = queue.pop()
+            for child in node.children:
+                child_vec = self._mean_vec([child])
+                grandchild_vec = self._mean_vec(child.children)
+                # add child to dataset
+                if child.children and child_vec is not None and grandchild_vec is not None:
+                    labels = np.zeros(len(self.roles), dtype=np.int8)
+                    labels[[self.roles["RoleId_%d" % role] for role in child.roles]] = 1
+                    X.append(np.concatenate((grandchild_vec, node_vecs[node_idx])))
+                    y.append(labels)
+                    queue.append((child, n_nodes))
+                    node_vecs.append(child_vec)
+                    n_nodes += 1
+
+    return X, y
