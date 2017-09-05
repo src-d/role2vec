@@ -85,12 +85,51 @@ class RoleModel(MapReduce):
         roles = {role: i for i, role in enumerate(roles)}
         return emb, roles
 
-    def _mean_vec(self, nodes):
-        tokens = [t for node in nodes for t in chain(node.token,
-                  ["RoleId_%d" % role for role in node.roles]) if t in self.emb]
+    @staticmethod
+    def node_iterator(root):
+        queue = [(root, 0)]
+        n_nodes = 1
+        while queue:
+            node, node_idx = queue.pop()
+            yield node, node_idx
+            for child in node.children:
+                queue.append((child, n_nodes))
+                n_nodes += 1
+
+    def _mean_vec(self, node):
+        tokens = [t for t in chain(node.token, ["RoleId_%d" % role for role in node.roles])
+                  if t in self.emb]
         if not tokens:
             return None, 0
         return np.mean([self.emb[t] for t in tokens], axis=0), len(tokens)
+
+    def _mean_vecs(self, root):
+        node_vecs = {0: self._mean_vec(root)}
+        child_vecs = {}
+        parent_vecs = {0: None}
+        n_nodes = 1  # incremented in accoradance with self.node_iterator
+
+        for node, node_idx in self.node_iterator(root):
+            node_child_vecs = []
+            node_child_ns = []
+
+            for child in node.children:
+                child_vec = self._mean_vec(child)
+                node_vecs[n_nodes] = child_vec
+                parent_vecs[n_nodes] = node_vecs[node_idx][0]
+                node_child_vecs.append(child_vec[0])
+                node_child_ns.append(child_vec[1])
+                n_nodes += 1
+
+            node_child_vecs = list(filter(lambda x: x is not None, node_child_vecs))
+            node_child_ns = list(filter(lambda x: x != 0, node_child_ns))
+
+            if node_child_vecs:
+                child_vecs[node_idx] = np.average(node_child_vecs, axis=0, weights=node_child_ns)
+            else:
+                child_vecs[node_idx] = None
+
+        return child_vecs, parent_vecs
 
 
 @MapReduce.wrap_queue_in
@@ -99,23 +138,14 @@ def _process_uast(self, filename):
     uast_model = UASTModel().load(filename)
 
     for uast in uast_model.uasts:
-        queue = [(uast, 0)]
-        node_vecs = [self._mean_vec([uast])]
-        n_nodes = 1
-
-        while queue:
-            node, node_idx = queue.pop()
-            for child in node.children:
-                child_vec = self._mean_vec([child])
-                grandchild_vec = self._mean_vec(child.children)
-                # add child to dataset
-                if child_vec is not None and grandchild_vec is not None:
-                    labels = np.zeros(len(self.roles), dtype=np.int8)
-                    labels[[self.roles["RoleId_%d" % role] for role in child.roles]] = 1
-                    X.append(np.concatenate((grandchild_vec, node_vecs[node_idx])))
-                    y.append(labels)
-                    queue.append((child, n_nodes))
-                    node_vecs.append(child_vec)
-                    n_nodes += 1
+        child_vecs, parent_vecs = self._mean_vecs(uast)
+        for node, node_idx in self.node_iterator(uast):
+            child_vec = child_vecs[node_idx]
+            parent_vec = parent_vecs[node_idx]
+            if child_vec is not None and parent_vec is not None:
+                labels = np.zeros(len(self.roles), dtype=np.int8)
+                labels[[self.roles["RoleId_%d" % role] for role in node.roles]] = 1
+                X.append(np.concatenate((child_vec, parent_vec)))
+                y.append(labels)
 
     return X, y
