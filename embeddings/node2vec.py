@@ -1,112 +1,103 @@
 import argparse
-from collections import Counter, deque
-from functools import partial
-from itertools import chain, islice, product, tee
+from collections import defaultdict, deque
+from itertools import combinations, islice, product, tee
 import logging
+import multiprocessing
 import os
-from pathlib import Path
 import time
 
-from gensim.models import Word2Vec
-from modelforge.progress_bar import progress_bar
+import numpy
+from scipy.sparse import coo_matrix
 
+from ast2vec.coocc import Cooccurrences
+from ast2vec.pickleable_logger import PickleableLogger
 from ast2vec.uast import UASTModel
-from build_vocab import Vocab
-from map_reduce import MapReduce
 from random_walk import Graph
 
 
-class Node2Vec(MapReduce):
+class Node2Vec(PickleableLogger):
     MAX_VOCAB_WORDS = 1000000
 
-    def __init__(self, log_level, dimensions, num_processes, vocab_path, window, graph):
+    def __init__(self, log_level, num_processes, vocab_path, window, graph):
         super(Node2Vec, self).__init__(log_level=log_level, num_processes=num_processes)
         self.graph = graph
-        self.word2vec = Word2Vec(size=dimensions, window=window, workers=8)
-        self.word2vec.build_vocab(Vocab.read_vocab(vocab_path)[:self.MAX_VOCAB_WORDS])
+        self.num_processes = num_processes
+        self.vocab = set(self.read_vocab(vocab_path)[:Node2Vec.MAX_VOCAB_WORDS])
+        self.window = window
 
-    def train(self, fname, output):
-        # print("\n\n----- KEK -----\n\n")
+    def process(self, fname, output):
         self._log.info("Scanning %s", fname)
-        files = [line.strip() for line in open(fname).readlines()]
-        self._log.info("Found %d files", len(files))
-        if not files:
-            return 0
+        paths = self.read_paths(fname)
+        self._log.info("Found %d files", len(paths))
 
-        self._log.info("Train model.")
-        self._train(files)
-        self._log.info("Finished training.")
+        self._log.info("Processing files.")
+        paths = self._preprocess_paths(paths, output)
+        start_time = time.time()
+        with multiprocessing.Pool(self.num_processes) as pool:
+            pool.starmap(self.process_uast, paths)
+        self._log.info("Finished processing in %.2f.", time.time() - start_time)
 
-        self._log.info("Saving model.")
-        self.word2vec.wv.save_word2vec_format(output)
+    def process_uast(self, filename, output):
+        uast = UASTModel().load(filename)
+        dok_matrix = defaultdict(int)
 
-    def _train(self, files):
-        @MapReduce.wrap_queue_in
-        def process_uast(self, filename):
-            uast = UASTModel().load(filename)
-            # print("\n\n----- LOL -----\n\n", filename)
-            return self.graph.simulate_walks(uast)
+        for walk in self.graph.simulate_walks(uast):
+            walk = [[t for t in map(str, node.tokens) if t in self.vocab] for node in walk]
+            for walk_window_raw in window(walk, n=self.window):
+                for walk_window in product(*walk_window_raw):
+                    for word1, word2 in combinations(walk_window, 2):
+                        dok_matrix[(word1, word2)] += 1
+                        dok_matrix[(word2, word1)] += 1
 
-        def train_walks(self, n_tasks, queue_out):
-            failures = 0
+        del uast
 
-            def consume(iterator, n):
-                """Advance the iterator n-steps ahead. If n is none, consume entirely."""
-                # Use functions that consume iterators at C speed.
-                if n is None:
-                    # feed the entire iterator into a zero-length deque
-                    deque(iterator, maxlen=0)
-                else:
-                    # advance to the empty slice starting at position n
-                    next(islice(iterator, n, n), None)
+        mat = coo_matrix((Node2Vec.MAX_VOCAB_WORDS, Node2Vec.MAX_VOCAB_WORDS), dtype=numpy.float32)
+        mat.row = row = numpy.empty(len(dok_matrix), dtype=numpy.int32)
+        mat.col = col = numpy.empty(len(dok_matrix), dtype=numpy.int32)
+        mat.data = data = numpy.empty(len(dok_matrix), dtype=numpy.float32)
+        for i, (coord, val) in enumerate(sorted(dok_matrix.items())):
+            row[i], col[i] = coord
+            data[i] = val
 
-            def window(iterable, n=2):
-                """s -> (s0, ...,s(n-1)), (s1, ...,sn), (s2, ..., s(n+1)), ..."""
-                iters = tee(iterable, n)
-                # Could use enumerate(islice(iters, 1, None), 1) to avoid consume(it, 0), but
-                # that's slower for larger window sizes, while saving only small fixed "noop" cost
-                for i, it in enumerate(iters):
-                    consume(it, i)
-                return zip(*iters)
+        del dok_matrix
 
-            def batch_stream():
-                nonlocal failures
-                i = 0
-                start = time.time()
-
-                for _ in progress_bar(range(n_tasks), self._log, expected_size=n_tasks):
-                    result = queue_out.get()
-                    if result:
-                        for walk in result:
-                            walk = [list(map(str, node.tokens)) for node in walk]
-                            for walk_window in window(walk, n=self.word2vec.window):
-                                yield list(product(*walk_window))
-                                i += 1
-                                if i % 10000 == 0:
-                                    print(i, time.time() - start)
-                    else:
-                        failures += 1
-
-            self.word2vec.train(
-                batch_stream(),
-                total_examples=1000000,
-                epochs=self.word2vec.iter)
-            return failures
-
-        # walks = []
-
-        # @MapReduce.wrap_queue_out
-        # def train_walks(res_walks):
-        #     nonlocal walks
-        #     res_walks = list(chain.from_iterable(
-        #         product(*(map(str, node.tokens) for node in walk)) for walk in res_walks))
-        #     walks.extend(res_walks)
-
-        self.parallelize(files, process_uast, train_walks)
-        # self.word2vec.train(walks, total_examples=len(walks), epochs=self.word2vec.iter)
+        coocc = Cooccurrences()
+        coocc.construct(tokens=self.vocab, matrix=mat)
+        coocc.save(output)
 
     def _get_log_name(self):
         return "Node2Vec"
+
+    def _preprocess_paths(self, paths, output):
+        preprocessed_paths = []
+        for p in paths:
+            name = os.path.basename(p)
+            if name.startswith("uast_"):
+                name = name[len("uast_"):]
+            out = os.path.join(output, name[0], name)
+            preprocessed_paths.append((p, out))
+        return preprocessed_paths
+
+
+def consume(iterator, n):
+    """Advance the iterator n-steps ahead. If n is none, consume entirely."""
+    # Use functions that consume iterators at C speed.
+    if n is None:
+        # feed the entire iterator into a zero-length deque
+        deque(iterator, maxlen=0)
+    else:
+        # advance to the empty slice starting at position n
+        next(islice(iterator, n, n), None)
+
+
+def window(iterable, n=2):
+    """s -> (s0, ...,s(n-1)), (s1, ...,sn), (s2, ..., s(n+1)), ..."""
+    iters = tee(iterable, n)
+    # Could use enumerate(islice(iters, 1, None), 1) to avoid consume(it, 0), but
+    # that's slower for larger window sizes, while saving only small fixed "noop" cost
+    for i, it in enumerate(iters):
+        consume(it, i)
+    return zip(*iters)
 
 
 def parse_args():
@@ -114,9 +105,8 @@ def parse_args():
     parser.add_argument("--log-level", default="INFO", choices=logging._nameToLevel,
                         help="Logging verbosity.")
     parser.add_argument("input", help="Input file with UASTs.")
-    parser.add_argument("output", help="Path to store the result model.")
-    parser.add_argument("--dimensions", default=300, help="Dimensionality of embeddings.")
-    parser.add_argument("--processes", type=int, default=1, help="Number of processes.")
+    parser.add_argument("output", help="Path to store the resulting matrices.")
+    parser.add_argument("--processes", type=int, default=4, help="Number of processes.")
     parser.add_argument("--vocabulary", default="vocab.txt", help="File with vocabulary.")
     parser.add_argument(
         "-n", "--num-walks", type=int, default=1, help="Number of random walks from each node.")
@@ -138,4 +128,4 @@ if __name__ == "__main__":
     graph = Graph(args.log_level, args.num_walks, args.walk_length, args.p, args.q)
     node2vec = Node2Vec(args.log_level, args.dimensions, args.processes,
                         args.vocabulary, args.window, graph)
-    node2vec.train(args.input, args.output)
+    node2vec.process(args.input, args.output)
