@@ -10,6 +10,7 @@ from sklearn.neural_network import MLPClassifier
 from ast2vec.token_parser import TokenParser
 from ast2vec.uast import UASTModel
 from map_reduce import MapReduce
+from utils import read_paths
 
 Node = namedtuple("Node", ["id", "parent", "children", "roles", "tokens"])
 
@@ -33,7 +34,7 @@ class RoleModel(MapReduce):
         self.model = joblib.load(model_path)
 
     def train(self, fname):
-        files = self.read_paths(fname)
+        paths = read_paths(fname)
 
         self._log.info("Train model.")
         self.model = MLPClassifier(random_state=1, verbose=True)
@@ -49,11 +50,11 @@ class RoleModel(MapReduce):
             self.model.partial_fit(X, y)
             print(self.model.loss_, time.time() - start, counter)
 
-        self.parallelize(files, _process_uast, train_uast)
+        self.parallelize(paths, _process_uast, train_uast)
         self._log.info("Finished training.")
 
     def test(self, fname):
-        files = self.read_paths(fname)
+        paths = read_paths(fname)
 
         self._log.info("Test model.")
         y_real, y_pred = [], []
@@ -65,7 +66,7 @@ class RoleModel(MapReduce):
             y_real.extend(y)
             y_pred.extend(self.model.predict_proba(X))
 
-        self.parallelize(files, _process_uast, test_uast)
+        self.parallelize(paths, _process_uast, test_uast)
         np.save("y_real.npy", y_real)
         np.save("y_pred.npy", y_pred)
         self._log.info("Finished testing.")

@@ -28,25 +28,6 @@ class MapReduce(PickleableLogger):
         return len(tasks) - failures
 
     @staticmethod
-    def read_vocab(vocab_path):
-        with open(vocab_path) as fin:
-            words = [line.split(" ")[0] for line in fin]
-        return words
-
-    @staticmethod
-    def read_paths(fname):
-        paths = [line.strip() for line in open(fname).readlines()]
-        if not paths:
-            raise ValueError("Make sure the file is not empty!")
-        return paths
-
-    @staticmethod
-    def save_vocab(vocab_path, vocab):
-        with open(vocab_path, "w") as fout:
-            fout.write("\n".join(
-                map(lambda x: "%s %d".join(x), vocab.most_common())))
-
-    @staticmethod
     def wrap_queue_in(func):
         def wrapper(self, queue_in, queue_out):
             while True:

@@ -1,6 +1,6 @@
 import argparse
-from collections import defaultdict, deque
-from itertools import combinations, islice, product, tee
+from collections import defaultdict
+from itertools import combinations, product
 import logging
 import multiprocessing
 import os
@@ -13,16 +13,17 @@ from ast2vec.coocc import Cooccurrences
 from ast2vec.pickleable_logger import PickleableLogger
 from ast2vec.uast import UASTModel
 from random_walk import Graph
+from utils import read_vocab, window
 
 
 class Node2Vec(PickleableLogger):
     MAX_VOCAB_WORDS = 1000000
 
     def __init__(self, log_level, num_processes, vocab_path, window, graph):
-        super(Node2Vec, self).__init__(log_level=log_level, num_processes=num_processes)
+        super(Node2Vec, self).__init__(log_level=log_level)
         self.graph = graph
         self.num_processes = num_processes
-        self.vocab = set(self.read_vocab(vocab_path)[:Node2Vec.MAX_VOCAB_WORDS])
+        self.vocab = set(read_vocab(vocab_path)[:Node2Vec.MAX_VOCAB_WORDS])
         self.window = window
 
     def process(self, fname, output):
@@ -79,27 +80,6 @@ class Node2Vec(PickleableLogger):
         return preprocessed_paths
 
 
-def consume(iterator, n):
-    """Advance the iterator n-steps ahead. If n is none, consume entirely."""
-    # Use functions that consume iterators at C speed.
-    if n is None:
-        # feed the entire iterator into a zero-length deque
-        deque(iterator, maxlen=0)
-    else:
-        # advance to the empty slice starting at position n
-        next(islice(iterator, n, n), None)
-
-
-def window(iterable, n=2):
-    """s -> (s0, ...,s(n-1)), (s1, ...,sn), (s2, ..., s(n+1)), ..."""
-    iters = tee(iterable, n)
-    # Could use enumerate(islice(iters, 1, None), 1) to avoid consume(it, 0), but
-    # that's slower for larger window sizes, while saving only small fixed "noop" cost
-    for i, it in enumerate(iters):
-        consume(it, i)
-    return zip(*iters)
-
-
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--log-level", default="INFO", choices=logging._nameToLevel,
@@ -126,6 +106,6 @@ if __name__ == "__main__":
     args = parse_args()
 
     graph = Graph(args.log_level, args.num_walks, args.walk_length, args.p, args.q)
-    node2vec = Node2Vec(args.log_level, args.dimensions, args.processes,
+    node2vec = Node2Vec(args.log_level, args.processes,
                         args.vocabulary, args.window, graph)
     node2vec.process(args.input, args.output)

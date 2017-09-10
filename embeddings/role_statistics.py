@@ -5,11 +5,12 @@ import logging
 
 from ast2vec.uast import UASTModel
 from map_reduce import MapReduce
+from utils import read_paths
 
 
 class RoleStat(MapReduce):
     def calc(self, fname, stat_output, susp_output):
-        paths = self.read_paths(fname)
+        paths = read_paths(fname)
         global_counter = Counter()
         suspicious = []
 

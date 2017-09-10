@@ -40,17 +40,6 @@ class Vocab(MapReduce):
         self.save_vocab(self.vocab_path, vocab)
         return vocab
 
-    @staticmethod
-    def read_vocab(vocab_path):
-        with open(vocab_path) as fin:
-            words = [line.split(" ")[0] for line in fin]
-        return words
-
-    @staticmethod
-    def save_vocab(vocab_path, vocab):
-        with open(vocab_path, "w") as fout:
-            fout.write("\n".join(map(lambda x: "%s %d" % x, vocab.most_common())))
-
     def _get_log_name(self):
         return "Vocab"
 
