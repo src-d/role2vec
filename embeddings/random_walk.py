@@ -31,7 +31,7 @@ class Graph(PickleableLogger):
 
         for i in range(2, self.walk_length):
             J, q = edges[(prev_node.id, cur_node.id)]
-            kk = int(np.random.rand() * len(J))
+            kk = np.random.randint(len(J))
 
             if np.random.rand() < q[kk]:
                 ind = kk
@@ -47,15 +47,12 @@ class Graph(PickleableLogger):
         """
         Repeatedly simulate random walks from each node.
         """
-        walks = []
-
         for uast, filename in zip(uasts.uasts, uasts.filenames):
             nodes, edges = self._preprocess_uast(uast)
             n_nodes = len(nodes)
 
             if n_nodes == 1:
-                self._log.info(
-                    "Skipping UAST for %s: has a single node." % filename)
+                self._log.info("Skipping UAST for %s: has a single node." % filename)
                 continue
 
             self._preprocess_transition_probs(nodes, edges)
@@ -68,14 +65,11 @@ class Graph(PickleableLogger):
                 while iter_nodes:
                     node = random.sample(iter_nodes, 1)
                     walk = self.node2vec_walk(node, edges, nodes)
-                    walks.append(walk)
+                    yield walk
 
                     for walk_node in walk:
                         if walk_node.id in iter_nodes:
                             iter_nodes.remove(walk_node.id)
-
-        random.shuffle(walks)
-        return walks
 
     def _get_log_name(self):
         return "Graph"
@@ -105,9 +99,8 @@ class Graph(PickleableLogger):
             return GraphNode(id=id, neighbors=[], tokens=self._get_tokens(node))
 
         self._log.info("Preprocessing UAST nodes.")
-        root_node = create_node(root, 0)
         edges = {}
-        nodes = [root_node]
+        nodes = [create_node(root, 0)]
         n_nodes = 1
 
         for node, node_idx in node_iterator(root):

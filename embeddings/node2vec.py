@@ -1,6 +1,6 @@
 import argparse
 from collections import defaultdict
-from itertools import combinations, product
+from itertools import product
 import logging
 import multiprocessing
 import os
@@ -13,7 +13,7 @@ from ast2vec.coocc import Cooccurrences
 from ast2vec.pickleable_logger import PickleableLogger
 from ast2vec.uast import UASTModel
 from random_walk import Graph
-from utils import read_paths, read_vocab, window
+from utils import read_paths, read_vocab
 
 
 class Node2Vec(PickleableLogger):
@@ -45,9 +45,9 @@ class Node2Vec(PickleableLogger):
 
         for walk in self.graph.simulate_walks(uast):
             walk = [[t for t in map(str, node.tokens) if t in self.vocab] for node in walk]
-            for walk_window_raw in window(walk, n=self.window):
-                for walk_window in product(*walk_window_raw):
-                    for word1, word2 in combinations(walk_window, 2):
+            for i, cur_tokens in enumerate(walk[:-1]):
+                for next_tokens in walk[(i + 1):(i + self.window)]:
+                    for word1, word2 in product(cur_tokens, next_tokens):
                         dok_matrix[(word1, word2)] += 1
                         dok_matrix[(word2, word1)] += 1
 
