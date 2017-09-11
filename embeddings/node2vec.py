@@ -13,7 +13,7 @@ from ast2vec.coocc import Cooccurrences
 from ast2vec.pickleable_logger import PickleableLogger
 from ast2vec.uast import UASTModel
 from random_walk import Graph
-from utils import read_vocab, window
+from utils import read_paths, read_vocab, window
 
 
 class Node2Vec(PickleableLogger):
@@ -28,7 +28,7 @@ class Node2Vec(PickleableLogger):
 
     def process(self, fname, output):
         self._log.info("Scanning %s", fname)
-        paths = self.read_paths(fname)
+        paths = read_paths(fname)
         self._log.info("Found %d files", len(paths))
 
         self._log.info("Processing files.")
@@ -39,6 +39,7 @@ class Node2Vec(PickleableLogger):
         self._log.info("Finished processing in %.2f.", time.time() - start_time)
 
     def process_uast(self, filename, output):
+        self._log.info("Processing %s", filename)
         uast = UASTModel().load(filename)
         dok_matrix = defaultdict(int)
 
@@ -65,6 +66,7 @@ class Node2Vec(PickleableLogger):
         coocc = Cooccurrences()
         coocc.construct(tokens=self.vocab, matrix=mat)
         coocc.save(output)
+        self._log.info("Finished processing %s", filename)
 
     def _get_log_name(self):
         return "Node2Vec"

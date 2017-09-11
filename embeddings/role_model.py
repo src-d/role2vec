@@ -1,5 +1,7 @@
+import argparse
 from collections import namedtuple
 from itertools import chain
+import logging
 import os
 import time
 
@@ -10,7 +12,7 @@ from sklearn.neural_network import MLPClassifier
 from ast2vec.token_parser import TokenParser
 from ast2vec.uast import UASTModel
 from map_reduce import MapReduce
-from utils import read_paths
+from utils import node_iterator, read_paths
 
 Node = namedtuple("Node", ["id", "parent", "children", "roles", "tokens"])
 
@@ -86,17 +88,6 @@ class RoleModel(MapReduce):
         roles = {role: i for i, role in enumerate(roles)}
         return emb, roles
 
-    @staticmethod
-    def node_iterator(root):
-        queue = [(root, 0)]
-        n_nodes = 1
-        while queue:
-            node, node_idx = queue.pop()
-            yield node, node_idx
-            for child in node.children:
-                queue.append((child, n_nodes))
-                n_nodes += 1
-
     def _mean_vec(self, node):
         tokens = [t for t in chain(node.token, ["RoleId_%d" % role for role in node.roles])
                   if t in self.emb]
@@ -108,9 +99,9 @@ class RoleModel(MapReduce):
         node_vecs = {0: self._mean_vec(root)}
         child_vecs = {}
         parent_vecs = {0: None}
-        n_nodes = 1  # incremented in accoradance with self.node_iterator
+        n_nodes = 1  # incremented in accoradance with node_iterator
 
-        for node, node_idx in self.node_iterator(root):
+        for node, node_idx in node_iterator(root):
             node_child_vecs = []
             node_child_ns = []
 
@@ -140,7 +131,7 @@ def _process_uast(self, filename):
 
     for uast in uast_model.uasts:
         child_vecs, parent_vecs = self._mean_vecs(uast)
-        for node, node_idx in self.node_iterator(uast):
+        for node, node_idx in node_iterator(uast):
             child_vec = child_vecs[node_idx]
             parent_vec = parent_vecs[node_idx]
             if child_vec is not None and parent_vec is not None:
@@ -150,3 +141,30 @@ def _process_uast(self, filename):
                 y.append(labels)
 
     return X, y
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--log-level", default="INFO", choices=logging._nameToLevel,
+                        help="Logging verbosity.")
+    parser.add_argument("--train", help="Input file with UASTs for training.")
+    parser.add_argument("--test", help="Input file with UASTs for testing.")
+    parser.add_argument("--model", required=True, help="Path to store trained model.")
+    parser.add_argument("--processes", type=int, default=2, help="Number of processes.")
+    parser.add_argument("--embeddings", help="File with roles and tokens embeddings.")
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+
+    rm = RoleModel(args.log_level, args.processes, args.embeddings)
+
+    if args.train:
+        rm.train(args.train)
+        rm.save(args.model)
+    else:
+        rm.load(args.model)
+
+    if args.test:
+        rm.test(args.test)

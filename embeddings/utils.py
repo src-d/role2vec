@@ -2,6 +2,17 @@ from collections import deque
 from itertools import islice, tee
 
 
+def node_iterator(root):
+    queue = [(root, 0)]
+    n_nodes = 1
+    while queue:
+        node, node_idx = queue.pop()
+        yield node, node_idx
+        for child in node.children:
+            queue.append((child, n_nodes))
+            n_nodes += 1
+
+
 def consume(iterator, n):
     """Advance the iterator n-steps ahead. If n is none, consume entirely."""
     # Use functions that consume iterators at C speed.
