@@ -63,7 +63,7 @@ class Graph(PickleableLogger):
                 iter_nodes = set(node.id for node in nodes)
 
                 while iter_nodes:
-                    node = random.sample(iter_nodes, 1)
+                    node = nodes[random.sample(iter_nodes, 1)[0]]
                     walk = self.node2vec_walk(node, edges, nodes)
                     yield walk
 

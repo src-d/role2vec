@@ -151,7 +151,7 @@ def parse_args():
     parser.add_argument("--test", help="Input file with UASTs for testing.")
     parser.add_argument("--model", required=True, help="Path to store trained model.")
     parser.add_argument("--processes", type=int, default=2, help="Number of processes.")
-    parser.add_argument("--embeddings", help="File with roles and tokens embeddings.")
+    parser.add_argument("--embeddings", required=True, help="File with roles and tokens embeddings.")
     return parser.parse_args()
 
 

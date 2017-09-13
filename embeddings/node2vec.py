@@ -2,7 +2,6 @@ import argparse
 from collections import defaultdict
 from itertools import product
 import logging
-import multiprocessing
 import os
 import time
 
@@ -10,20 +9,21 @@ import numpy
 from scipy.sparse import coo_matrix
 
 from ast2vec.coocc import Cooccurrences
-from ast2vec.pickleable_logger import PickleableLogger
 from ast2vec.uast import UASTModel
+from map_reduce import MapReduce
 from random_walk import Graph
 from utils import read_paths, read_vocab
 
 
-class Node2Vec(PickleableLogger):
+class Node2Vec(MapReduce):
     MAX_VOCAB_WORDS = 1000000
 
     def __init__(self, log_level, num_processes, vocab_path, window, graph):
-        super(Node2Vec, self).__init__(log_level=log_level)
+        super(Node2Vec, self).__init__(log_level=log_level, num_processes=num_processes)
         self.graph = graph
         self.num_processes = num_processes
-        self.vocab = set(read_vocab(vocab_path)[:Node2Vec.MAX_VOCAB_WORDS])
+        self.vocab = {w: i for i, w in enumerate(
+            read_vocab(vocab_path)[:Node2Vec.MAX_VOCAB_WORDS])}
         self.window = window
 
     def process(self, fname, output):
@@ -31,42 +31,50 @@ class Node2Vec(PickleableLogger):
         paths = read_paths(fname)
         self._log.info("Found %d files", len(paths))
 
+        @MapReduce.wrap_queue_in
+        def process_uast(self, obj):
+            filename, output = obj
+            self._log.info("Processing %s", filename)
+            uast = UASTModel().load(filename)
+            dok_matrix = defaultdict(int)
+
+            for walk in self.graph.simulate_walks(uast):
+                walk = [[self.vocab[t] for t in map(str, node.tokens)
+                        if t in self.vocab] for node in walk]
+                for i, cur_tokens in enumerate(walk[:-1]):
+                    for next_tokens in walk[(i + 1):(i + self.window)]:
+                        for word1, word2 in product(cur_tokens, next_tokens):
+                            dok_matrix[(word1, word2)] += 1
+                            dok_matrix[(word2, word1)] += 1
+
+            del uast
+
+            mat = coo_matrix(
+                (Node2Vec.MAX_VOCAB_WORDS, Node2Vec.MAX_VOCAB_WORDS), dtype=numpy.float32)
+            mat.row = row = numpy.empty(len(dok_matrix), dtype=numpy.int32)
+            mat.col = col = numpy.empty(len(dok_matrix), dtype=numpy.int32)
+            mat.data = data = numpy.empty(len(dok_matrix), dtype=numpy.float32)
+            for i, (coord, val) in enumerate(sorted(dok_matrix.items())):
+                row[i], col[i] = coord
+                data[i] = val
+
+            del dok_matrix
+
+            coocc = Cooccurrences()
+            coocc.construct(tokens=sorted(self.vocab, key=self.vocab.get), matrix=mat)
+            coocc.save(output)
+            self._log.info("Finished processing %s", filename)
+            return filename
+
+        @MapReduce.wrap_queue_out
+        def process_output(self, result):
+            pass
+
         self._log.info("Processing files.")
         paths = self._preprocess_paths(paths, output)
         start_time = time.time()
-        with multiprocessing.Pool(self.num_processes) as pool:
-            pool.starmap(self.process_uast, paths)
+        self.parallelize(paths, process_uast, process_output)
         self._log.info("Finished processing in %.2f.", time.time() - start_time)
-
-    def process_uast(self, filename, output):
-        self._log.info("Processing %s", filename)
-        uast = UASTModel().load(filename)
-        dok_matrix = defaultdict(int)
-
-        for walk in self.graph.simulate_walks(uast):
-            walk = [[t for t in map(str, node.tokens) if t in self.vocab] for node in walk]
-            for i, cur_tokens in enumerate(walk[:-1]):
-                for next_tokens in walk[(i + 1):(i + self.window)]:
-                    for word1, word2 in product(cur_tokens, next_tokens):
-                        dok_matrix[(word1, word2)] += 1
-                        dok_matrix[(word2, word1)] += 1
-
-        del uast
-
-        mat = coo_matrix((Node2Vec.MAX_VOCAB_WORDS, Node2Vec.MAX_VOCAB_WORDS), dtype=numpy.float32)
-        mat.row = row = numpy.empty(len(dok_matrix), dtype=numpy.int32)
-        mat.col = col = numpy.empty(len(dok_matrix), dtype=numpy.int32)
-        mat.data = data = numpy.empty(len(dok_matrix), dtype=numpy.float32)
-        for i, (coord, val) in enumerate(sorted(dok_matrix.items())):
-            row[i], col[i] = coord
-            data[i] = val
-
-        del dok_matrix
-
-        coocc = Cooccurrences()
-        coocc.construct(tokens=self.vocab, matrix=mat)
-        coocc.save(output)
-        self._log.info("Finished processing %s", filename)
 
     def _get_log_name(self):
         return "Node2Vec"
@@ -77,8 +85,10 @@ class Node2Vec(PickleableLogger):
             name = os.path.basename(p)
             if name.startswith("uast_"):
                 name = name[len("uast_"):]
-            out = os.path.join(output, name[0], name)
-            preprocessed_paths.append((p, out))
+            out_dir = os.path.join(output, name[0])
+            os.makedirs(out_dir, exist_ok=True)
+            out_fname = os.path.join(out_dir, name)
+            preprocessed_paths.append((p, out_fname))
         return preprocessed_paths
 
 
