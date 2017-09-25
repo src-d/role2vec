@@ -1,5 +1,6 @@
 from collections import namedtuple
 import random
+from typing import Dict, Iterator, List, Tuple
 
 import numpy as np
 
@@ -11,8 +12,20 @@ GraphNode = namedtuple("GraphNode", ["id", "neighbors", "tokens"])
 
 
 class Graph(PickleableLogger):
-    def __init__(self, log_level, num_walks, walk_length, p, q):
-        assert walk_length > 1, "Random walks have at least two nodes."
+    """
+    Generates random walks from UASTs.
+    """
+
+    def __init__(self, log_level: str, num_walks: int, walk_length: int, p: float, q: float):
+        """
+        :param log_level: Log level of Node2Vec.
+        :param num_walks: Number of random walks from each node.
+        :param walk_length: Random walk length.
+        :param p: Controls the likelihood of immediately revisiting previous node.
+        :param q: Controls the likelihood of exploring outward nodes.
+        """
+        if walk_length <= 1:
+            raise ValueError("Random walks have at least two nodes.")
 
         super(Graph, self).__init__(log_level=log_level)
         self.num_walks = num_walks
@@ -21,9 +34,15 @@ class Graph(PickleableLogger):
         self.q = 1 / q
         self.token_parser = TokenParser()
 
-    def node2vec_walk(self, start_node, edges, nodes):
+    def node2vec_walk(self, start_node: GraphNode, edges: Dict[Tuple[int, int], None],
+                      nodes: List[GraphNode]) -> List[GraphNode]:
         """
         Simulate a random walk starting from start node.
+
+        :param start_node: Starting node for random walk.
+        :param edges: Dict for storing mapping from node id pairs to transition probabilities.
+        :param nodes: List of UAST nodes.
+        :return: List of GraphNodes in random walk.
         """
         walk = [None] * self.walk_length
         prev_node = walk[0] = start_node
@@ -33,6 +52,7 @@ class Graph(PickleableLogger):
             J, q = edges[(prev_node.id, cur_node.id)]
             kk = np.random.randint(len(J))
 
+            # Draw a sample from discrete distribution at constant time.
             if np.random.rand() < q[kk]:
                 ind = kk
             else:
@@ -43,9 +63,12 @@ class Graph(PickleableLogger):
 
         return walk
 
-    def simulate_walks(self, uasts):
+    def simulate_walks(self, uasts) -> Iterator[List[GraphNode]]:
         """
         Repeatedly simulate random walks from each node.
+
+        :param uasts: List of UASTs.
+        :return: Iterator over random walks generated for the input UASTs.
         """
         for uast, filename in zip(uasts.uasts, uasts.filenames):
             nodes, edges = self._preprocess_uast(uast)
@@ -74,13 +97,23 @@ class Graph(PickleableLogger):
     def _get_log_name(self):
         return "Graph"
 
-    def _get_tokens(self, uast_node):
+    def _get_tokens(self, uast_node) -> List[str]:
+        """
+        Return node tokens.
+
+        :param uast_node: UAST node.
+        :return: List of tokens.
+        """
         return ["RoleId_%d" % role for role in uast_node.roles] + \
             list(self.token_parser.process_token(uast_node.token))
 
-    def _preprocess_transition_probs(self, nodes, edges):
+    def _preprocess_transition_probs(self, nodes: List[GraphNode],
+                                     edges: Dict[Tuple[int, int], None]) -> None:
         """
         Preprocessing of transition probabilities for guiding the random walks.
+
+        :param nodes: List of GraphNodes in UAST.
+        :param edges: Dict for storing mapping from node id pairs to transition probabilities.
         """
         self._log.info("Preprocessing transition probabilities.")
         for edge in edges:
@@ -91,9 +124,12 @@ class Graph(PickleableLogger):
             ])
             edges[edge] = alias_setup(unnormalized_probs / unnormalized_probs.sum())
 
-    def _preprocess_uast(self, root):
+    def _preprocess_uast(self, root) -> Tuple[List[GraphNode], Dict[Tuple[int, int], None]]:
         """
         Add neighbors information to UAST nodes.
+
+        :param root: Root node in UAST.
+        :return: Nodes and edges in the UAST.
         """
         def create_node(node, id):
             return GraphNode(id=id, neighbors=[], tokens=self._get_tokens(node))
@@ -114,11 +150,14 @@ class Graph(PickleableLogger):
         return nodes, edges
 
 
-def alias_setup(probs):
+def alias_setup(probs: np.array) -> Tuple[np.array, np.array]:
     """
     Compute utility lists for non-uniform sampling from discrete distributions.
     Refer to https://hips.seas.harvard.edu/blog/2013/03/03/the-alias-method-efficient-sampling-with-many-discrete-outcomes/
     for details
+
+    :param probs: Discrete distribution.
+    :return: Two helper tables.
     """
     K = len(probs)
     q = probs * K

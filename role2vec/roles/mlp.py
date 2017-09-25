@@ -1,41 +1,28 @@
-import argparse
-from collections import namedtuple
 from itertools import chain
-import logging
-import os
 import time
+from typing import Dict, Tuple
 
 import numpy as np
-from sklearn.externals import joblib
 from sklearn.neural_network import MLPClassifier
 
-from ast2vec.token_parser import TokenParser
 from ast2vec.uast import UASTModel
 from map_reduce import MapReduce
+from roles_base import register_roles_model, RolesBase
 from utils import node_iterator, read_paths
 
-Node = namedtuple("Node", ["id", "parent", "children", "roles", "tokens"])
 
+@register_roles_model
+class RolesMLP(RolesBase):
+    """
+    Predicts roles using Multi-Layer Perceptron.
+    """
 
-class RoleModel(MapReduce):
-    def __init__(self, log_level, num_processes, emb_path):
-        super(RoleModel, self).__init__(log_level=log_level, num_processes=num_processes)
-        self.emb, self.roles = self.load_emb(emb_path)
-        self.model = None
-        self.token_parser = TokenParser()
+    def train(self, fname: str) -> None:
+        """
+        Train model.
 
-    def save(self, model_path):
-        if self.model is None:
-            raise ValueError("Model is empty.")
-        self._log.info("Saving model to %s.", model_path)
-        joblib.dump(self.model, model_path)
-
-    def load(self, model_path):
-        if not os.path.exists(model_path):
-            raise ValueError("Provided path to model doesn't exist: %s", model_path)
-        self.model = joblib.load(model_path)
-
-    def train(self, fname):
+        :param fname: Path to train file with filepaths to stored UASTs.
+        """
         paths = read_paths(fname)
 
         self._log.info("Train model.")
@@ -55,7 +42,12 @@ class RoleModel(MapReduce):
         self.parallelize(paths, _process_uast, train_uast)
         self._log.info("Finished training.")
 
-    def test(self, fname):
+    def test(self, fname: str) -> None:
+        """
+        Test model.
+
+        :param fname: Path to test file with filepaths to stored UASTs.
+        """
         paths = read_paths(fname)
 
         self._log.info("Test model.")
@@ -73,29 +65,27 @@ class RoleModel(MapReduce):
         np.save("y_pred.npy", y_pred)
         self._log.info("Finished testing.")
 
-    @staticmethod
-    def load_emb(emb_path):
-        emb = {}
-        roles = []
+    def _mean_vec(self, node) -> Tuple[np.array, int]:
+        """
+        Calculate mean of role/token embeddings for a node.
 
-        with open(emb_path) as fin:
-            for line in fin:
-                word, *vec = line.split("\t")
-                emb[word] = np.array(vec, dtype=np.float)
-                if word.startswith("RoleId_"):
-                    roles.append(word)
-
-        roles = {role: i for i, role in enumerate(roles)}
-        return emb, roles
-
-    def _mean_vec(self, node):
-        tokens = [t for t in chain(node.token, ["RoleId_%d" % role for role in node.roles])
+        :param node: UAST node.
+        :return: Mean of role/token embeddings and their total number.
+        """
+        tokens = [t for t in chain(node.token, ("RoleId_%d" % role for role in node.roles))
                   if t in self.emb]
         if not tokens:
             return None, 0
         return np.mean([self.emb[t] for t in tokens], axis=0), len(tokens)
 
-    def _mean_vecs(self, root):
+    def _mean_vecs(self, root) -> Tuple[Dict[int, np.array], Dict[int, np.array]]:
+        """
+        Calculate mean of role/token embeddings for nodes and their children in a UAST.
+
+        :param root: UAST root node.
+        :return: Mappings from node indices to their parent's and their childrens' mean role/token
+                 embeddings.
+        """
         node_vecs = {0: self._mean_vec(root)}
         child_vecs = {}
         parent_vecs = {0: None}
@@ -125,7 +115,15 @@ class RoleModel(MapReduce):
 
 
 @MapReduce.wrap_queue_in
-def _process_uast(self, filename):
+def _process_uast(self, filename: str) -> Tuple[np.array, np.array]:
+    """
+    Convert UAST into feature and label arrays.
+    Had to be defined outside of RolesMLP so that we don't suppply `self` twice.
+
+    :param filename: Path to stored UAST.
+    :return: Array of concatenated mean parent and children role/token embeddings for each node and
+             the corresponding array of node roles.
+    """
     X, y = [], []
     uast_model = UASTModel().load(filename)
 
@@ -140,31 +138,4 @@ def _process_uast(self, filename):
                 X.append(np.concatenate((child_vec, parent_vec)))
                 y.append(labels)
 
-    return X, y
-
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--log-level", default="INFO", choices=logging._nameToLevel,
-                        help="Logging verbosity.")
-    parser.add_argument("--train", help="Input file with UASTs for training.")
-    parser.add_argument("--test", help="Input file with UASTs for testing.")
-    parser.add_argument("--model", required=True, help="Path to store trained model.")
-    parser.add_argument("--processes", type=int, default=2, help="Number of processes.")
-    parser.add_argument("--embeddings", required=True, help="File with roles and tokens embeddings.")
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    args = parse_args()
-
-    rm = RoleModel(args.log_level, args.processes, args.embeddings)
-
-    if args.train:
-        rm.train(args.train)
-        rm.save(args.model)
-    else:
-        rm.load(args.model)
-
-    if args.test:
-        rm.test(args.test)
+    return np.array(X), np.array(y)

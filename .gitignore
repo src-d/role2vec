@@ -18,9 +18,3 @@
 # jupyter notebooks
 *.ipynb_checkpoints/
 
-# virtualenv
-role2vec/*
-
-# python libraries
-ast2vec/*
-vecino/*

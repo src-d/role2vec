@@ -1,20 +1,37 @@
-import argparse
 from collections import Counter
-import logging
 from pathlib import Path
 import struct
+from typing import List, Tuple
 
 from ast2vec.coocc import Cooccurrences
-from build_vocab import Vocab
 from map_reduce import MapReduce
+from utils import read_vocab
 
 
 class GloVe(MapReduce):
-    def __init__(self, log_level, num_processes, vocab_path):
-        super(GloVe, self).__init__(log_level=log_level, num_processes=num_processes)
-        self.vocab = {word: i for i, word in enumerate(Vocab.read_vocab(vocab_path))}
+    """
+    Converts proximity matrices into GloVe suitable format.
+    Refer to https://github.com/stanfordnlp/GloVe
+    """
 
-    def convert(self, src_dir, output, file_filter):
+    def __init__(self, log_level: str, num_processes: int, vocab_path: str):
+        """
+        :param log_level: Log level of GloVe.
+        :param num_processes: Number of running processes. There's always one additional process
+                              for reducing data.
+        :param vocab_path: Path to stored vocabulary.
+        """
+        super(GloVe, self).__init__(log_level=log_level, num_processes=num_processes)
+        self.vocab = {word: i for i, word in enumerate(read_vocab(vocab_path))}
+
+    def convert(self, src_dir: str, output: str, file_filter: str) -> None:
+        """
+        Combine all proximity matrices and save them into GloVe suitable format.
+
+        :param src_dir: Path to stored proximity matrices.
+        :param output: Path for storing the resulting GloVe suitable matrix.
+        :param file_filter: Pattern for recursively scanning `src_dir`.
+        """
         self._log.info("Scanning %s", src_dir)
         files = [str(p) for p in Path(src_dir).glob(file_filter)]
         self._log.info("Found %d files", len(files))
@@ -22,13 +39,19 @@ class GloVe(MapReduce):
             return 0
 
         self._log.info("Combine proximity matrices.")
-        mat = self.extract(files)
+        mat = self.combine_mats(files)
         self._log.info("Finished combining.")
 
         self._log.info("Saving matrix.")
         self.save_mat(mat, output)
 
-    def extract(self, files):
+    def combine_mats(self, files: List[str]) -> Counter[Tuple[str, str], int]:
+        """
+        Combine proximity matrices.
+
+        :param files: List of filepaths to stored proximity matrices.
+        :return: Mapping from token pairs to their proximity combined over all matrices.
+        """
         counter = Counter()
 
         @MapReduce.wrap_queue_in
@@ -48,7 +71,13 @@ class GloVe(MapReduce):
         return counter
 
     @staticmethod
-    def save_mat(mat, output):
+    def save_mat(mat: Counter[Tuple[str, str], int], output: str) -> None:
+        """
+        Save matrix in GloVe suitable format.
+
+        :param mat: Counter storing proximities.
+        :param output: Path for storing the resulting GloVe suitable matrix.
+        """
         with open(output, "wb") as fout:
             for (i, j), val in mat.items():
                 fout.write(struct.pack("iid", i, j, int(val)))
@@ -57,20 +86,6 @@ class GloVe(MapReduce):
         return "GloVe"
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--log-level", default="INFO", choices=logging._nameToLevel,
-                        help="Logging verbosity.")
-    parser.add_argument("input", help="Input directory with proximity matrices.")
-    parser.add_argument("output", help="Path to store combined proximity matrix.")
-    parser.add_argument("--filter", default="**/*.asdf", help="File name glob selector.")
-    parser.add_argument("--processes", type=int, default=2, help="Number of processes.")
-    parser.add_argument("--vocabulary", default="vocab.txt", help="File with vocabulary.")
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    args = parse_args()
-
+def glove_entry(args):
     glove = GloVe(args.log_level, args.processes, args.vocabulary)
     glove.convert(args.input, args.output, args.filter)
