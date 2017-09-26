@@ -153,7 +153,8 @@ class Graph(PickleableLogger):
 def alias_setup(probs: np.array) -> Tuple[np.array, np.array]:
     """
     Compute utility lists for non-uniform sampling from discrete distributions.
-    Refer to https://hips.seas.harvard.edu/blog/2013/03/03/the-alias-method-efficient-sampling-with-many-discrete-outcomes/
+    Refer to https://hips.seas.harvard.edu/blog/2013/03/03/the-alias-method-efficient-sampling-with
+    -many-discrete-outcomes/
     for details
 
     :param probs: Discrete distribution.
