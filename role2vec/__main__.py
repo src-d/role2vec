@@ -6,6 +6,7 @@ from ast2vec.__main__ import ArgumentDefaultsHelpFormatterNoNone, one_arg_parser
 from modelforge.logs import setup_logging
 from role2vec.glove import glove_entry
 from role2vec.node2vec import node2vec_entry
+from role2vec.stats import stats_entry
 from role2vec.roles.base import roles_entry
 
 
@@ -23,6 +24,7 @@ def get_parser() -> argparse.ArgumentParser:
 
     process_arg = one_arg_parser("--processes", type=int, default=2, help="Number of processes.")
     vocab_arg = one_arg_parser("--vocabulary", default="vocab.txt", help="File with vocabulary.")
+    uast_input_arg = one_arg_parser("input", help="Input file with UASTs.")
 
     # Construct subparsers
 
@@ -42,9 +44,8 @@ def get_parser() -> argparse.ArgumentParser:
         "node2vec", help="Node2Vec random walk algorithm for assembling proximity matrices from "
         "UASTs. Refer to https://github.com/aditya-grover/node2vec",
         formatter_class=ArgumentDefaultsHelpFormatterNoNone,
-        parents=[process_arg, vocab_arg])
+        parents=[process_arg, vocab_arg, uast_input_arg])
     node2vec_parser.set_defaults(handler=node2vec_entry)
-    node2vec_parser.add_argument("input", help="Input file with UASTs.")
     node2vec_parser.add_argument("output", help="Path to store the resulting matrices.")
     node2vec_parser.add_argument(
         "-n", "--num-walks", type=int, default=1, help="Number of random walks from each node.")
@@ -59,7 +60,7 @@ def get_parser() -> argparse.ArgumentParser:
         "-q", type=float, default=1.0, help="Controls the likelihood of exploring outward nodes.")
 
     roles_parser = subparsers.add_parser(
-        "mlp", help="Predict roles using Multi-Layer Perceptron.",
+        "mlp", help="Train/test roles prediction model.",
         formatter_class=ArgumentDefaultsHelpFormatterNoNone,
         parents=[process_arg])
     roles_parser.set_defaults(handler=roles_entry)
@@ -69,6 +70,14 @@ def get_parser() -> argparse.ArgumentParser:
     roles_parser.add_argument("--model", required=True, help="Path to store trained model.")
     roles_parser.add_argument(
         "--embeddings", required=True, help="File with roles and tokens embeddings.")
+
+    stats_parser = subparsers.add_parser(
+        "stats", help="Collect statistics for number of nodes w.r.t. number of node roles in "
+        "UASTs.", formatter_class=ArgumentDefaultsHelpFormatterNoNone,
+        parents=[process_arg, uast_input_arg])
+    stats_parser.set_defaults(handler=stats_entry)
+    stats_parser.add_argument("--stat", required=True, help="Path to store resulting statisics.")
+    stats_parser.add_argument("--susp", required=True, help="Path to store suspicious UASTs.")
 
     return parser
 

@@ -1,15 +1,26 @@
-import argparse
 from collections import Counter
 import json
-import logging
 
 from ast2vec.uast import UASTModel
 from role2vec.map_reduce import MapReduce
 from role2vec.utils import node_iterator, read_paths
 
 
-class RoleStat(MapReduce):
-    def calc(self, fname, stat_output, susp_output):
+class RolesStats(MapReduce):
+    """
+    Collects statistics for number of nodes w.r.t. number of node roles in all UASTs.
+    """
+
+    def calc(self, fname: str, stat_output: str, susp_output: str) -> None:
+        """
+        Compute statistics and store them in JSON format.
+
+        :param fname: Path to file with filepaths to stored UASTs.
+        :param stat_output: Path for storing JSON file with statistics.
+        :param susp_output: Path for storing txt file with info about suspicious UASTs. The file
+                            has three columns: filepath to UAST, number of nodes in UAST, number of
+                            nodes without roles in UAST.
+        """
         paths = read_paths(fname)
         global_counter = Counter()
         suspicious = []
@@ -19,12 +30,8 @@ class RoleStat(MapReduce):
             counter = Counter()
             uast_model = UASTModel().load(filename)
             for uast in uast_model.uasts:
-                queue = [uast]
-                counter[len(uast.roles)] += 1
-                while queue:
-                    node = queue.pop()
+                for node, _ in node_iterator(uast):
                     counter[len(node.roles)] += 1
-                    queue.extend(node.children)
             return counter, filename
 
         @MapReduce.wrap_queue_out
@@ -44,19 +51,6 @@ class RoleStat(MapReduce):
         self._log.info("Finished collecting statistics.")
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--log-level", default="INFO", choices=logging._nameToLevel,
-                        help="Logging verbosity.")
-    parser.add_argument("input", help="Input file with UASTs.")
-    parser.add_argument("--stat", help="Path to store resulting statisics.")
-    parser.add_argument("--susp", help="Path to store suspicious UASTs.")
-    parser.add_argument("--processes", type=int, default=4, help="Number of processes.")
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    args = parse_args()
-
-    role_stat = RoleStat(args.log_level, args.processes)
+def stats_entry(args):
+    role_stat = RolesStats(args.log_level, args.processes)
     role_stat.calc(args.input, args.stat, args.susp)
