@@ -44,7 +44,7 @@ class Vocab(MapReduce):
                     nodes.extend(node.children)
             return tokens
 
-        @MapReduce.wrap_queue_out
+        @MapReduce.wrap_queue_out()
         def combine_vocab(result):
             nonlocal vocab
             vocab.update(result)

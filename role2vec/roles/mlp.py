@@ -31,7 +31,7 @@ class RolesMLP(RolesBase):
         counter = 0
         start = time.time()
 
-        @MapReduce.wrap_queue_out
+        @MapReduce.wrap_queue_out()
         def train_uast(self, result):
             nonlocal counter, start
             X, y = result
@@ -53,7 +53,7 @@ class RolesMLP(RolesBase):
         self._log.info("Test model.")
         y_real, y_pred = [], []
 
-        @MapReduce.wrap_queue_out
+        @MapReduce.wrap_queue_out()
         def test_uast(self, result):
             nonlocal y_real, y_pred
             X, y = result

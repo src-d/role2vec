@@ -85,7 +85,7 @@ class Node2Vec(MapReduce):
             self._log.info("Finished processing %s", filename)
             return filename
 
-        @MapReduce.wrap_queue_out
+        @MapReduce.wrap_queue_out()
         def process_output(self, result):
             pass
 

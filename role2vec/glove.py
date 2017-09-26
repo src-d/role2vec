@@ -60,7 +60,7 @@ class GloVe(MapReduce):
             return {(prox.tokens[i], prox.tokens[j]): val for
                     i, j, val in zip(prox.matrix.row, prox.matrix.col, prox.matrix.data)}
 
-        @MapReduce.wrap_queue_out
+        @MapReduce.wrap_queue_out()
         def combine_prox(result):
             nonlocal counter
             counter.update(

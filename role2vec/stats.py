@@ -34,7 +34,7 @@ class RolesStats(MapReduce):
                     counter[len(node.roles)] += 1
             return counter, filename
 
-        @MapReduce.wrap_queue_out
+        @MapReduce.wrap_queue_out()
         def combine_stat(self, result):
             nonlocal global_counter
             counter, filename = result
