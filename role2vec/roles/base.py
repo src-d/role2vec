@@ -3,8 +3,8 @@ import os
 from sklearn.externals import joblib
 
 from ast2vec.token_parser import TokenParser
-from map_reduce import MapReduce
-from utils import read_embeddings
+from role2vec.map_reduce import MapReduce
+from role2vec.utils import read_embeddings
 
 ROLES_MODELS = dict()
 

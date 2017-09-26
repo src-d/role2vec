@@ -4,8 +4,8 @@ import json
 import logging
 
 from ast2vec.uast import UASTModel
-from map_reduce import MapReduce
-from utils import read_paths
+from role2vec.map_reduce import MapReduce
+from role2vec.utils import node_iterator, read_paths
 
 
 class RoleStat(MapReduce):

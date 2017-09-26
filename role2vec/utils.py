@@ -1,4 +1,4 @@
-from collections import Counter, deque
+from collections import deque
 from itertools import islice, tee
 from typing import Dict, Iterable, Iterator, List, Tuple
 
@@ -77,7 +77,7 @@ def read_vocab(vocab_path: str, num_words: int=None) -> List[str]:
     return words
 
 
-def save_vocab(vocab_path: str, vocab: Counter[str, int]) -> None:
+def save_vocab(vocab_path: str, vocab: Dict[str, int]) -> None:
     with open(vocab_path, "w") as fout:
         fout.write("\n".join(
             map(lambda x: "%s %d".join(x), vocab.most_common())))

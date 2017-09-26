@@ -6,7 +6,7 @@ import numpy as np
 
 from ast2vec.pickleable_logger import PickleableLogger
 from ast2vec.token_parser import TokenParser
-from utils import node_iterator
+from role2vec.utils import node_iterator
 
 GraphNode = namedtuple("GraphNode", ["id", "neighbors", "tokens"])
 

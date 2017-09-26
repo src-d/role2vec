@@ -6,9 +6,9 @@ import numpy as np
 from sklearn.neural_network import MLPClassifier
 
 from ast2vec.uast import UASTModel
-from map_reduce import MapReduce
-from roles_base import register_roles_model, RolesBase
-from utils import node_iterator, read_paths
+from role2vec.map_reduce import MapReduce
+from role2vec.roles_base import register_roles_model, RolesBase
+from role2vec.utils import node_iterator, read_paths
 
 
 @register_roles_model

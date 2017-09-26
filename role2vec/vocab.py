@@ -1,12 +1,12 @@
 import argparse
 from collections import Counter
 import logging
-from typing import List
+from typing import Dict, List
 
 from ast2vec.token_parser import TokenParser
 from ast2vec.uast import UASTModel
-from map_reduce import MapReduce
-from utils import save_vocab
+from role2vec.map_reduce import MapReduce
+from role2vec.utils import save_vocab
 
 
 class Vocab(MapReduce):
@@ -23,7 +23,7 @@ class Vocab(MapReduce):
         super(Vocab, self).__init__(log_level=log_level, num_processes=num_processes)
         self.token_parser = TokenParser()
 
-    def create(self, files: List[str]) -> Counter[str, int]:
+    def create(self, files: List[str]) -> Dict[str, int]:
         """
         Create vocabulary by processing supplied UASTs.
 

@@ -1,11 +1,11 @@
 from collections import Counter
 from pathlib import Path
 import struct
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from ast2vec.coocc import Cooccurrences
-from map_reduce import MapReduce
-from utils import read_vocab
+from role2vec.map_reduce import MapReduce
+from role2vec.utils import read_vocab
 
 
 class GloVe(MapReduce):
@@ -45,7 +45,7 @@ class GloVe(MapReduce):
         self._log.info("Saving matrix.")
         self.save_mat(mat, output)
 
-    def combine_mats(self, files: List[str]) -> Counter[Tuple[str, str], int]:
+    def combine_mats(self, files: List[str]) -> Dict[Tuple[str, str], int]:
         """
         Combine proximity matrices.
 
@@ -71,7 +71,7 @@ class GloVe(MapReduce):
         return counter
 
     @staticmethod
-    def save_mat(mat: Counter[Tuple[str, str], int], output: str) -> None:
+    def save_mat(mat: Dict[Tuple[str, str], int], output: str) -> None:
         """
         Save matrix in GloVe suitable format.
 

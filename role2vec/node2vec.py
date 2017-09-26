@@ -8,9 +8,9 @@ from scipy.sparse import coo_matrix, diags
 
 from ast2vec.coocc import Cooccurrences
 from ast2vec.uast import UASTModel
-from map_reduce import MapReduce
-from random_walk import Graph
-from utils import read_paths, read_vocab
+from role2vec.map_reduce import MapReduce
+from role2vec.random_walk import Graph
+from role2vec.utils import read_paths, read_vocab
 
 
 class Node2Vec(MapReduce):
