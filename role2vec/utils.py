@@ -79,5 +79,4 @@ def read_vocab(vocab_path: str, num_words: int=None) -> List[str]:
 
 def save_vocab(vocab_path: str, vocab: Dict[str, int]) -> None:
     with open(vocab_path, "w") as fout:
-        fout.write("\n".join(
-            map(lambda x: "%s %d".join(x), vocab.most_common())))
+        fout.write("\n".join(map(lambda x: "%s %d" % x, vocab.most_common())))

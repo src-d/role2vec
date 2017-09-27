@@ -7,6 +7,7 @@ from modelforge.logs import setup_logging
 from role2vec.glove import glove_entry
 from role2vec.node2vec import node2vec_entry
 from role2vec.stats import stats_entry
+from role2vec.vocab import vocab_entry
 from role2vec.roles.base import roles_entry
 
 
@@ -78,6 +79,13 @@ def get_parser() -> argparse.ArgumentParser:
     stats_parser.set_defaults(handler=stats_entry)
     stats_parser.add_argument("--stat", required=True, help="Path to store resulting statisics.")
     stats_parser.add_argument("--susp", required=True, help="Path to store suspicious UASTs.")
+
+    vocab_parser = subparsers.add_parser(
+        "vocab", help="Collect vocabulary from UASTs.",
+        formatter_class=ArgumentDefaultsHelpFormatterNoNone,
+        parents=[process_arg, uast_input_arg])
+    vocab_parser.set_defaults(handler=vocab_entry)
+    vocab_parser.add_argument("output", default="vocab.txt", help="Path to store vocabulary.")
 
     return parser
 

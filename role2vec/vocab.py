@@ -1,12 +1,10 @@
-import argparse
 from collections import Counter
-import logging
 from typing import Dict, List
 
 from ast2vec.token_parser import TokenParser
 from ast2vec.uast import UASTModel
 from role2vec.map_reduce import MapReduce
-from role2vec.utils import save_vocab
+from role2vec.utils import node_iterator, read_paths, save_vocab
 
 
 class Vocab(MapReduce):
@@ -37,15 +35,12 @@ class Vocab(MapReduce):
             uast_model = UASTModel().load(filename)
             tokens = Counter()
             for uast in uast_model.uasts:
-                nodes = [uast]
-                while nodes:
-                    node = nodes.pop()
+                for node, _ in node_iterator(uast):
                     tokens.update(self._get_tokens(node))
-                    nodes.extend(node.children)
             return tokens
 
         @MapReduce.wrap_queue_out()
-        def combine_vocab(result):
+        def combine_vocab(self, result):
             nonlocal vocab
             vocab.update(result)
 
@@ -66,20 +61,8 @@ class Vocab(MapReduce):
             list(self.token_parser.process_token(uast_node.token))
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--log-level", default="INFO", choices=logging._nameToLevel,
-                        help="Logging verbosity.")
-    parser.add_argument("input", help="Input file with UASTs.")
-    parser.add_argument("output", default="vocab.txt", help="Path to store vocabulary.")
-    parser.add_argument("--processes", type=int, default=2, help="Number of processes.")
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    args = parse_args()
-
-    uasts = open(args.input).read().split("\n")
-    vocab = Vocab(args.log_level, args.processes, args.output)
+def vocab_entry(args):
+    uasts = read_paths(args.input)
+    vocab = Vocab(args.log_level, args.processes)
     words = vocab.create(uasts)
     save_vocab(args.output, words)
