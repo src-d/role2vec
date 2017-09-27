@@ -1,6 +1,5 @@
-from collections import deque
-from itertools import islice, tee
-from typing import Dict, Iterable, Iterator, List, Tuple
+from itertools import islice
+from typing import Dict, List, Tuple
 
 import numpy as np
 
@@ -19,36 +18,6 @@ def node_iterator(root):
             n_nodes += 1
 
 
-def consume(iterator: Iterator, n: int) -> None:
-    """
-    Advance the iterator n-steps ahead. If n is none, consume entirely.
-
-    :param iterator: Input iterator.
-    :param n: Number of steps.
-    """
-    # Use functions that consume iterators at C speed.
-    if n is None:
-        # feed the entire iterator into a zero-length deque
-        deque(iterator, maxlen=0)
-    else:
-        # advance to the empty slice starting at position n
-        next(islice(iterator, n, n), None)
-
-
-def window(iterable: Iterable, n: int=2) -> Iterator:
-    """
-    Create consecutive windows of elements from iterable.
-
-    :param iterable: Input iterable.
-    :param n: Window size.
-    :return: Iterator for windows from the input iterable.
-    """
-    iters = tee(iterable, n)
-    for i, it in enumerate(iters):
-        consume(it, i)
-    return zip(*iters)
-
-
 def read_embeddings(emb_path: str) -> Tuple[Dict[str, np.array], List[str]]:
     emb = {}
     roles = []
@@ -65,7 +34,8 @@ def read_embeddings(emb_path: str) -> Tuple[Dict[str, np.array], List[str]]:
 
 
 def read_paths(fname: str) -> List[str]:
-    paths = [line.strip() for line in open(fname).readlines()]
+    with open(fname) as fin:
+        paths = [line.strip() for line in fin.readlines()]
     if not paths:
         raise ValueError("Make sure the file is not empty!")
     return paths

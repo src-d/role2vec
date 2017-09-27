@@ -8,7 +8,7 @@ from role2vec.glove import glove_entry
 from role2vec.node2vec import node2vec_entry
 from role2vec.stats import stats_entry
 from role2vec.vocab import vocab_entry
-from role2vec.roles.base import roles_entry
+from role2vec.roles.base import ROLES_MODELS, roles_entry
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -65,7 +65,8 @@ def get_parser() -> argparse.ArgumentParser:
         formatter_class=ArgumentDefaultsHelpFormatterNoNone,
         parents=[process_arg])
     roles_parser.set_defaults(handler=roles_entry)
-    roles_parser.add_argument("algorithm", help="Specify training algorithm.")
+    roles_parser.add_argument(
+        "algorithm", choices=ROLES_MODELS.keys(), help="Specify training algorithm.")
     roles_parser.add_argument("--train", help="Input file with UASTs for training.")
     roles_parser.add_argument("--test", help="Input file with UASTs for testing.")
     roles_parser.add_argument("--model", required=True, help="Path to store trained model.")

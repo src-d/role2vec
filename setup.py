@@ -24,7 +24,7 @@ setup(
     },
     keywords=["machine learning on source code", "word2vec", "id2vec",
               "github", "swivel", "nbow", "bblfsh", "babelfish"],
-    install_requires=["ast2vec[tf]>=0.3.4-alpha"] + typing,
+    install_requires=["ast2vec[tf]>=0.3.4-alpha", "scikit-learn>=0.19.0"] + typing,
     package_data={"": ["LICENSE", "README.md"]},
     classifiers=[
         "Development Status :: 3 - Alpha",
