@@ -82,7 +82,7 @@ Details:
 
 * The authors propose a procedure for (i) determining the node sequences for which neighborhood graphs are created and (ii) computing a normalization of neighborhood graphs.
 * Node sequence selection: sort nodes according to some labeling (e.g. color refinement a.k.a. naive vertex classification), then traverse this sequence with some stride and generate receptive fields for each selected node.
-    * For each selecte node we assemble its neighborhood by BFS.
+    * For each selected node we assemble its neighborhood by BFS.
     * Each neighborhood is normalized to produce a receptieve field: pick neighboring nodes according to the receptive field size and canonize the subgraph for these nodes.
 * We can interpret node and edge features as channels, thus we can feed the generated receptive fields to a CNN.
 
@@ -126,7 +126,7 @@ http://dl.acm.org/citation.cfm?id=2806512
 Details: 
 
 * The authors propose the same loss as in skip-gram, but with Noise Contrastive Estimation.
-* Turns out optimizing this loss is equivalent to factorizing PMI for transition probability matrix, thus we ccould use lower dimensional representation of our nodes.
+* Turns out optimizing this loss is equivalent to factorizing PMI for transition probability matrix, thus we could use lower dimensional representation of our nodes.
 * We can generate multiple k-step transition probability matrices (it contains probabilities for reaching other vertices in exactly k steps), and concatenate their respective lower dimensional approximations.
 
 Thoughts: Matrix factorization based methods can't learn complex non-linear interactions, unless it's explicitly encoded in the matrix itself. This method overcomes some of these limitations by utilizing info from many transition probability matrices, but it feels that "Deep Neural Networks for Learning Graph Representations" offers a better way to handle non-linear dependencies in data.
